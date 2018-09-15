@@ -9,13 +9,16 @@
 package life.lovesoft.filestorage;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.zip.DeflaterOutputStream;
+import java.util.zip.InflaterInputStream;
 
 /**
  *
@@ -34,55 +37,83 @@ public class Storage{
 	 *
 	 * @param <T> return type of object to open.
 	 * @param type class type of object to open.
-	 * @param uuid the uuid of the object to open.
-	 * @return returns the opened object if it can be found and is not locked, otherwise null if not found.
+	 * @param uuid the ID of the object to open.
+	 * @return the opened object if it can be found and is not locked, otherwise null.
 	 */
 	public static <T extends Storable> T open(Class<T> type, String uuid){
-		return null;
+		try{
+			if(uuid == null || uuid.isEmpty()){
+				throw new RuntimeException("Cannot open a storable object with a null or empty UUID!");
+			}
+
+			String path = getSaveLocation(type, uuid);
+			File file = new File(path);
+
+			if(!file.exists()){
+				throw new RuntimeException("File does not exist! Path: " + path);
+			}
+
+			if(!file.isFile()){
+				throw new RuntimeException("File is not a file! Path: " + path);
+			}
+
+			if(!file.canRead()){
+				throw new RuntimeException("Cannot read the file! Path: " + path);
+			}
+
+			try(ObjectInputStream in = new ObjectInputStream(new InflaterInputStream(new FileInputStream(file)))){
+				return (T) in.readObject();
+			}catch(Exception e){
+				LOG.log(Level.SEVERE, "Unable to read object file! Path: " + path, e);
+				return null;
+			}
+		}catch(RuntimeException e){
+			LOG.log(Level.SEVERE, "Unable to open file!", e);
+			return null;
+		}
 	}
 
 	/**
 	 * Save an object that extends Storable.
 	 *
-	 * @param <T> return type of object that will be saved save.
 	 * @param store the object to save, must extend Storable.
-	 * @return returns the saved object if it can be saved and is not locked.
+	 * @return true if able to save, false if the object cannot be saved.
 	 */
 	public static boolean save(Storable store){
-		//throw if null
-		if(store == null){
-			throw new RuntimeException("Cannot save a null object!");
-		}
+		try{
+			if(store == null){
+				throw new RuntimeException("Cannot save a null object!");
+			}
 
-		//if new, it may not have an ID (UUID as String) so we create one
-		if(store.getID() == null || store.getID().isEmpty()){
-			store.setID(UUID.randomUUID().toString());
-		}
+			//if new, it may not have an ID (UUID as String) so we'll create one before saving
+			if(store.getID() == null || store.getID().isEmpty()){
+				store.setID(UUID.randomUUID().toString());
+			}
 
-		//if new, it may not have a createdDateTime (LocalDateTime) so we create one
-		if(store.getCreatedDateTime() == null){
-			store.setCreatedDateTime(LocalDateTime.now());
-		}
+			//if new, it may not have a createdDateTime (LocalDateTime) so we'll create one before saving
+			if(store.getCreatedDateTime() == null){
+				store.setCreatedDateTime(LocalDateTime.now());
+			}
 
-		//always set the last updated to now
-		store.setLastUpdatedDateTime(LocalDateTime.now());
-		
-		//get the file location and make a new File object for it
-		File file = new File(getSaveLocation(store));
+			//always set the last updated time to now
+			store.setLastUpdatedDateTime(LocalDateTime.now());
 
-		try(ObjectOutputStream out = new ObjectOutputStream(new DeflaterOutputStream(new FileOutputStream(file)))){
-			//get the directory as a File object
+			String path = getSaveLocation(store);
+			File file = new File(path);
+
 			File dir = new File(getSaveDirectory(store));
-			//Make the directory as some may not exist
 			dir.mkdirs();
-			//write out the object
-			out.writeObject(store);
-			//flush to ensure to file system
-			out.flush();
-			//return true, we were able to save
-			return true;
-		}catch(Exception e){
-			LOG.log(Level.SEVERE, "Could not save a storable object!", e);
+
+			try(ObjectOutputStream out = new ObjectOutputStream(new DeflaterOutputStream(new FileOutputStream(file)))){
+				out.writeObject(store);
+				out.flush();
+				return true;
+			}catch(Exception e){
+				LOG.log(Level.SEVERE, "Unable to write object file! Path: " + path, e);
+				return false;
+			}
+		}catch(RuntimeException e){
+			LOG.log(Level.SEVERE, "Unable to save storable object!", e);
 			return false;
 		}
 	}
