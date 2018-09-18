@@ -155,6 +155,18 @@ public class Storage{
 	}
 
 	public static void setDataDirectory(String aDataDirectory){
+		if(aDataDirectory == null || aDataDirectory.isEmpty()){
+			throw new RuntimeException("Cannot have a null or empty Data Directory!");
+		}
+		
+		if(aDataDirectory.charAt(aDataDirectory.length() - 1) == '/'){
+			throw new RuntimeException("Data Directory path cannot end with / !");
+		}
+		
+		if(aDataDirectory.charAt(aDataDirectory.length() - 1) == '\\'){
+			throw new RuntimeException("Data Directory path cannot end with \\ !");
+		}
+
 		dataDirectory = aDataDirectory;
 	}
 }
